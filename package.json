@@ -6,14 +6,11 @@
   "author": "bruce mcpherson",
   "license": "MIT",
   "dependencies": {
-    "@octokit/plugin-retry": "^3.0.6",
-    "@octokit/plugin-throttling": "^3.3.4",
     "@octokit/rest": "^18.0.12",
-    "fuzzy-search": "^3.2.1",
     "got": "^11.8.1",
     "lz-string": "^1.4.4",
     "object-hash": "^2.1.1",
-    "rottler": "^1.1.7",
+    "p-queue": "^6.6.2",
     "yargs": "^16.2.0"
   }
 }

@@ -1,5 +1,5 @@
 class GitFile {
-  static fuzzyList = ["name", "path", "sha"];
+
   static decorations = ["content"];
   constructor(data) {
     if (data.importFields) {
@@ -31,8 +31,6 @@ class GitFile {
       });
     }
   }
-  get fuzzyList() {
-    return this.constructor.fuzzyList;
-  }
+
 }
 module.exports = GitFile;

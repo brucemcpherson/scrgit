@@ -1,5 +1,5 @@
 class GitShax {
-  static fuzzyList = ["id"];
+
   constructor(data) {
     if (data.importFields) {
       this.fields = data.importFields;
@@ -11,8 +11,6 @@ class GitShax {
       this.fields.id = data.sha;
     }
   }
-  get fuzzyList() {
-    return this.constructor.fuzzyList;
-  }
+
 }
 module.exports = GitShax;

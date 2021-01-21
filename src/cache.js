@@ -17,6 +17,7 @@ const raw = () => {
 const cacheGet = async () => {
   // no need for the github api to get this
   const rawUrl = await raw()
+  console.log('...looking for cached data in ', rawUrl)
   return got.get(rawUrl)
     .then((r) => {
       return r && r.body ? decompress(r.body) : null

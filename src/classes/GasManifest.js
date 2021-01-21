@@ -4,8 +4,8 @@ class GasManifest {
     const content = this.file && this.file.fields && this.file.fields.content;
     try {
       // some manifests have trailing commas, we can fix it by double parsing
-      const t = JSON.stringify(content)
-      this.manifest = t ? JSON.parse(t) : null;
+      const t = JSON.stringify(content);
+      this.manifest = t ? JSON.parse(JSON.parse(t)) : null;
     } catch (err) {
       console.log(
         "skipping after failed to parse manifest",
@@ -59,6 +59,9 @@ class GasManifest {
   }
   get oauthScopes() {
     return this.prop("oauthScopes");
+  }
+  get dataStudio() {
+    return this.prop("dataStudio");
   }
 }
 

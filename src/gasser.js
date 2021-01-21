@@ -9,6 +9,7 @@ const enumerateManifests = (gd) => {
     runtimeVersions: new Map(),
     addOns: new Map(),
     oauthScopes: new Map(),
+    dataStudios: new Map()
   };
   mf.maps = maps;
 
@@ -43,7 +44,7 @@ const enumerateManifests = (gd) => {
             versions: new Map(),
             label: f,
           });
-          map.versions.set(f, item.addOns[f]);
+          map.get(f).versions.set(f, item.addOns[f]);
         }
       });
     }
@@ -71,6 +72,13 @@ const enumerateManifests = (gd) => {
         map: maps.timeZones,
         version: "timeZone",
         id: null,
+      });
+      add({
+        prop: "dataStudio",
+        item: f,
+        map: maps.dataStudios,
+        version: "description",
+        id: "name",
       });
       add({
         prop: "runtimeVersion",

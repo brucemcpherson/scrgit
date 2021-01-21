@@ -12,7 +12,8 @@ const getKey = (key, keyId = "cache") => {
 
 const queryDefinition = {
   query: {
-    q: "appsscript.json in:path",
+    //q: "appsscript.json in:path",
+    q: "filename:appsscript extension:.json",
   },
   keyId: "scrgit",
   get dataName() {
@@ -21,13 +22,20 @@ const queryDefinition = {
       keyId: this.keyId,
     });
   },
-  // TODO - make this rebuildable by searching gists
+  // the git hub api only does searches up to a 1000 results,
+  // so we have to do multiple split by date
+  ranges: [
+    "size:<=100",
+    "size:101..250",
+    "size:251..400",
+    "size:401..550",
+    "size:>550",
+  ],
   gistId: "d066837f73759c78ea86d04474732eb0",
-  get gistApi() { 
+  get gistApi() {
     return `https://api.github.com/gists/${this.gistId}`;
-  }
+  },
 };
-//gist.githubusercontent.com/brucemcpherson/52534a2d401ec83e99aee76bd37af274/raw/59b66ba9c5b14567cb3880b892688c26d75bd946/dbb52fc3f291b2ac8263d96519dd6ae2ce750699
 
 https: module.exports = {
   queryDefinition,

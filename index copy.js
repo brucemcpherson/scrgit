@@ -3,37 +3,63 @@ const { enumerateManifests } = require("./src/gasser");
 const { makeOwnerTreeData } = require("./src/d3prep");
 const { queryDefinition } = require("./src/settings");
 
-
 const {
   fetchAllCode,
-  decorators,
+  decorateRepo,
+  decorateOwner,
+  decorateFile,
 } = require("./src/fetchgit");
 
 const { cacheGet, cacheSet } = require("./src/cache");
-
+const Rottler = require("rottler");
 
 const argv = require("yargs/yargs")(process.argv.slice(2)).usage(
-  "$0 -f -m -t -p (force update, max to write, test mode -dont write update page to start at"
+  "$0 -f -m -t (force update, max to write, test mode -dont write update"
 ).argv;
 
-// make redis from scratchyarn ad
+// make redis from scratch
 const makeCache = ({ max = Infinity } = {}) => {
   console.log("...rebuilding cache");
+  const rot = new Rottler({
+    rate: 200,
+    period: 20 * 1000,
+    delay: 100,
+    smooth: true,
+  });
 
-  const decorator = ({ gd, type, transformer }) => {
-    return Promise.all(
-      gd.items(type).map((f) =>queue.add(()=>transformer({ row: f })))
-      .then(() => console.log("....decorated", type)))
+  const rotter = async ({ gd, type, transformer }) => {
+    rot.reset();
+    const rowIterator = rot.rowIterator({
+      rows: gd.items(type),
+      transformer,
+    });
+    for await (let { index } of rowIterator) {
+    }
+    console.log("....decorated", type);
   };
 
   return fetchAllCode(queryDefinition.query, max)
-    .then((gd) => decorators(gd))
-    .then((gd) =>
-      argv.t
-        ? Promise.resolve(gd)
-        : cacheSet({ value: gd.export() }).then(() => gd)
-    );
-};
+    .then(async (gd) => {
+      await rotter({
+        gd,
+        type: "owners",
+        transformer: ({ row }) => decorateOwner(row),
+      });
+      await rotter({
+        gd,
+        type: "repos",
+        transformer: ({ row }) => decorateRepo(row),
+      });
+      await rotter({
+        gd,
+        type: "files",
+        transformer: ({ row }) => decorateFile(row),
+      });
+      return gd;
+    })
+
+    .then((gd) => argv.t ? Promise.resolve(gd) : cacheSet({ value: gd.export() }).then(() => gd));
+}; 
 
 // preferably get from redis
 const getFromCache = async ({ noCache, max }) => {
@@ -57,23 +83,8 @@ const getFromCache = async ({ noCache, max }) => {
 
 (async () => {
   const gd = await getFromCache({ noCache: argv.f, max: argv.m });
-  console.log(gd)
   const mf = enumerateManifests(gd);
-  console.log({
-    repos: gd.repos.size,
-    owners: gd.owners.size,
-    files: gd.files.size,
-    shaxs: gd.shaxs.size,
-    advancedServices: mf.maps.advancedServices.size,
-    libraries: mf.maps.libraries.size,
-    timeZones: mf.maps.timeZones.size,
-    runtimeVersions: mf.maps.runtimeVersions.size,
-    webapps: mf.maps.webapps.size,
-    addOns: mf.maps.addOns.size,
-    oauthScopes: mf.maps.oauthScopes.size,
-    dataStudios: mf.maps.dataStudios.size
-  });
-  // console.log(JSON.stringify(Array.from(gd.repos.values()).map(f=>f.fields.name).sort()))
+  //console.log(JSON.stringify(Array.from(gd.repos.values()).map(f=>f.fields.name).sort()))
   /*
   console.log(Array.from(mf.maps.advancedServices));
   console.log(Array.from(mf.maps.libraries));

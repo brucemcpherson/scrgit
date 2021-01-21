@@ -1,6 +1,6 @@
 
 class GitOwner {
-  static fuzzyList = ["login"];
+
   static decorations = ["name", "company", "location", "email"];
   constructor({ repository, importFields }) {
     if (importFields) {
@@ -31,8 +31,6 @@ class GitOwner {
     }
   }
 
-  get fuzzyList() {
-    return this.constructor.fuzzyList;
-  }
+
 }
 module.exports = GitOwner;

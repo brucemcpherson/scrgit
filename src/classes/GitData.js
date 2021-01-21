@@ -2,7 +2,6 @@ const GitFile = require("./GitFile.js");
 const GitOwner = require("./GitOwner.js");
 const GitRepo = require("./GitRepo.js");
 const GitShax = require("./GitShax.js");
-const FuzzySearch = require("fuzzy-search");
 const types = ["shaxs", "files", "owners", "repos"];
 
 class GitData {
@@ -41,9 +40,6 @@ class GitData {
     return this;
   }
 
-  makeFuzzies() {
-    return new Map(this.types.map((k) => [k, this.items(k).fuzzy(k)]));
-  }
 
   add(data) {
     const file = new GitFile(data);
@@ -87,17 +83,7 @@ class GitData {
     const items = this.items(type);
     return items.map((f) => f.fields);
   }
-  /**
-   * get a fuzzy search object
-   * @param {string} type owner,repo etc..
-   */
-  fuzzy(type) {
-    const items = this.items(type);
-    const fuzzyList = items[0] && items[0].fuzzyList;
-    return new FuzzySearch(this.fields(type), fuzzyList, {
-      sort: true,
-    });
-  }
+
 }
 
 module.exports = GitData;

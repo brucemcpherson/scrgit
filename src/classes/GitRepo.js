@@ -1,6 +1,6 @@
 class GitRepo {
-  static fuzzyList = ["full_name", "name"];
-  static decorations = ["stargazers", "subscribers"];
+
+  static decorations = [];
 
   constructor({ repository, importFields }) {
     if (importFields) {
@@ -15,11 +15,10 @@ class GitRepo {
         {}
       );
       this.fields.ownerId = owner.id;
+  
     }
   }
-  get fuzzyList() {
-    return this.constructor.fuzzyList;
-  }
+
 
   decorate(body) {
     if (body) {
