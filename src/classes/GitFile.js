@@ -1,6 +1,6 @@
 class GitFile {
 
-  static decorations = ["content"];
+  static decorations = [];
   constructor(data) {
     if (data.importFields) {
       this.fields = data.importFields;

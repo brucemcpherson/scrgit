@@ -1,7 +1,7 @@
 class GasManifest {
-  constructor(file) {
-    this.file = file;
-    const content = this.file && this.file.fields && this.file.fields.content;
+  constructor(shax) {
+    this.shax = shax;
+    const content = this.shax && this.shax.fields && this.shax.fields.content;
     try {
       // some manifests have trailing commas, we can fix it by double parsing
       const t = JSON.stringify(content);
@@ -9,7 +9,7 @@ class GasManifest {
     } catch (err) {
       console.log(
         "skipping after failed to parse manifest",
-        this.file.fields.html_url,
+        this.firstRepoName,
         content
       );
       this.manifest = null;
@@ -17,13 +17,17 @@ class GasManifest {
   }
 
   get id() {
-    return this.file.id;
+    return this.shax.id;
   }
 
   prop(type) {
     return this.manifest && this.manifest[type];
   }
-
+  get firstRepoName() { 
+    return (
+      this.shax && this.shax && this.shax.fields && this.shax.fields.repoFullName
+    );
+  }
   get advancedServices() {
     return this.dependencies && this.dependencies.enabledAdvancedServices;
   }

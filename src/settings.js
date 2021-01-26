@@ -12,7 +12,6 @@ const getKey = (key, keyId = "cache") => {
 
 const queryDefinition = {
   query: {
-    //q: "appsscript.json in:path",
     q: "filename:appsscript extension:.json",
   },
   keyId: "scrgit",
@@ -31,7 +30,7 @@ const queryDefinition = {
     "size:401..550",
     "size:>550",
   ],
-  gistId: "d066837f73759c78ea86d04474732eb0",
+  gistId: "96225da353b054ccb1688b97b018b332",
   get gistApi() {
     return `https://api.github.com/gists/${this.gistId}`;
   },
