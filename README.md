@@ -44,6 +44,5 @@ These apply to merge.js
 | option | meaning |
 | ---- | ---- |
 | -n | a comma delimited set of files names to merge |
-| -m | max number to read from git hub - usually only for testing |
 | -t | test mode - data consolidated but not written to cache |
 | -o | output to a file |
