@@ -1,6 +1,6 @@
 {
   "name": "scrgit",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "get apps script projects",
   "main": "index.js",
   "author": "bruce mcpherson",
@@ -8,9 +8,11 @@
   "dependencies": {
     "@octokit/rest": "^18.0.12",
     "got": "^11.8.1",
+    "load-json-file": "^6.2.0",
     "lz-string": "^1.4.4",
     "object-hash": "^2.1.1",
     "qottle": "^1.0.5",
+    "write-json-file": "^4.3.0",
     "yargs": "^16.2.0"
   }
 }
