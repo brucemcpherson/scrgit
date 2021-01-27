@@ -31,3 +31,19 @@ module.exports = {
 | -m | max number to read from git hub - usually only for testing |
 | -t | test mode - data pulled from git hub and processed but cache is not updated |
 | -c | create a brand new, empty cache file |
+| -o | output to a file |
+
+# Merging
+
+Because the Github API returns random results for a search, you won't ever get them all. For best coverage, run index.js several times with the -o flag to create a number of views, then run merge.js to consolidate the contents of all of those.
+
+## cli options
+
+These apply to merge.js
+
+| option | meaning |
+| ---- | ---- |
+| -n | a comma delimited set of files names to merge |
+| -m | max number to read from git hub - usually only for testing |
+| -t | test mode - data consolidated but not written to cache |
+| -o | output to a file |
