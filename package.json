@@ -1,6 +1,6 @@
 {
   "name": "scrgit",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "get apps script projects",
   "main": "index.js",
   "author": "bruce mcpherson",

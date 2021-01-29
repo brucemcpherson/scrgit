@@ -14,17 +14,8 @@ const argv = require("yargs/yargs")(process.argv.slice(2)).usage(
 // make redis from scratchyarn ad
 const makeCache = ({ max = Infinity } = {}) => {
   console.log("...rebuilding cache");
-
-  const decorator = ({ gd, type, transformer }) => {
-    return Promise.all(
-      gd
-        .items(type)
-        .map((f) => queue.add(() => transformer({ row: f })))
-        .then(() => console.log("....decorated", type))
-    );
-  };
-
-  return fetchAllCode(queryDefinition.query, max)
+  console.log(queryDefinition.fullQuery)
+  return fetchAllCode(queryDefinition.fullQuery, max)
     .then((gd) => decorators(gd))
     .then((gd) =>
       argv.t

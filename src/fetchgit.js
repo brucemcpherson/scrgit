@@ -118,6 +118,7 @@ const gitSearcher = ({ options, page = 0 } = {}) => {
     .then((response) => gitUntangle(response, searchOptions));
 };
 
+// not using this any more
 const gitGazers = ({ options, page = 0 } = {}) => {
   const searchOptions = {
     per_page: 10,

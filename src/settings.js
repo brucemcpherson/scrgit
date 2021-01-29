@@ -14,7 +14,13 @@ const queryDefinition = {
   query: {
     q: "filename:appsscript extension:.json",
   },
+  sorting: " sort:indexed",
   keyId: "scrgit",
+  get fullQuery() {
+    return {
+      q: `${this.query.q}${this.sorting}`,
+    };
+  },
   get dataName() {
     return getKey({
       query: this.query,
@@ -24,11 +30,13 @@ const queryDefinition = {
   // the git hub api only does searches up to a 1000 results,
   // so we have to do multiple split by date
   ranges: [
-    "size:<=100",
-    "size:101..250",
-    "size:251..400",
-    "size:401..550",
-    "size:>550",
+    "size:<100",
+    "size:100..199",
+    "size:200..299",
+    "size:300..399",
+    "size:400..499",
+    "size:500..599",
+    "size:>599",
   ],
   gistId: "96225da353b054ccb1688b97b018b332",
   get gistApi() {
