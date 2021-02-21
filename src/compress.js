@@ -3,19 +3,24 @@
  * @param {object} obj object to compress
  * @return {string} as base64
  */
-const lz = require('lz-string')
-const compress = (obj) => { 
-  return compressString (JSON.stringify(obj))
-}
+const lz = require("lz-string");
+
+const replacer = (key, value) => value === null ? undefined : value;
+
+const stringifyDropNulls = (obj) => JSON.stringify(obj, replacer);
+
+const compress = (obj) => {
+  return compressString(stringifyDropNulls(obj));
+};
 /**
- * 
+ *
  * @param {string} str string to compress
  * @return {string} as base64
  */
-const compressString = (str) => lz.compressToBase64(str)
+const compressString = (str) => lz.compressToBase64(str);
 
 /**
- * 
+ *
  * @param {string} str b64 string to decompress
  * @return {object} original object
  */
@@ -33,5 +38,5 @@ module.exports = {
   compress,
   compressString,
   decompress,
-  decompressString
-}
+  decompressString,
+};

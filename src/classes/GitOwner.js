@@ -28,7 +28,7 @@ class GitOwner {
         p[c] = owner[c];
         return p;
       }, {});
-      if (!this.fields.name) this.fields.name === this.fields.login;
+      if (!this.fields.name) this.fields.name = this.fields.login;
     }
   }
 
@@ -37,6 +37,8 @@ class GitOwner {
       this.constructor.decorations.forEach((f) => {
         this.fields[f] = body[f];
       });
+      // need a tweak for missing name
+      if (!this.fields.name) this.fields.name = this.fields.login;
     }
   }
 }

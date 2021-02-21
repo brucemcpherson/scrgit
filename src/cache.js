@@ -6,8 +6,9 @@ const got = require("got");
 const { gistUpdate } = require ('./fetchgit')
 
 // this should get us the latest raw url for this gist
-const raw = () => { 
-  return got.get(queryDefinition.gistApi).json()
+const raw = (url) => { 
+  console.log("...looking for gist link in ", url);
+  return got.get(url).json()
     .then(r => { 
       return r.files && r.files[Object.keys(r.files)[0]].raw_url
     })
@@ -16,13 +17,14 @@ const raw = () => {
 // cache is using gist now
 const cacheGet = async () => {
   // no need for the github api to get this
-  const rawUrl = await raw()
+  const rawUrl = await raw(queryDefinition.gistApi);
   console.log('...looking for cached data in ', rawUrl)
   return got.get(rawUrl)
     .then((r) => {
       return r && r.body ? decompress(r.body) : null
     })
 }
+
 
 // write to gist - not required in client version
 const cacheSet = ({ value }) => {
@@ -33,6 +35,7 @@ const cacheSet = ({ value }) => {
     })
   })
 }
+
 
 module.exports = {
   cacheGet,

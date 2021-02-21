@@ -1,4 +1,4 @@
-const decorations = [];
+const decorations = ['scriptId', 'claspHtmlUrl'];
 
 class GitFile {
 

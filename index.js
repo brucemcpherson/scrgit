@@ -2,26 +2,53 @@ const GitData = require("./src/classes/GitData");
 const { enumerateManifests } = require("./src/gasser");
 const { queryDefinition } = require("./src/settings");
 
-const { fetchAllCode, decorators, gistCreate } = require("./src/fetchgit");
+const {
+  fetchAllCode,
+  decorators,
+  gistCreate
+} = require("./src/fetchgit");
 
 const { cacheGet, cacheSet } = require("./src/cache");
 const writeJsonFile = require("write-json-file");
 
 const argv = require("yargs/yargs")(process.argv.slice(2)).usage(
-  "$0 -c -f -m -t -p -o (create,force update, max to write, test mode -dont write update page to start at - write file"
+  "$0 -c -f -m -t -p -o  (create,force update, max to write, test mode -dont write update page to start at - write file"
 ).argv;
 
 // make redis from scratchyarn ad
 const makeCache = ({ max = Infinity } = {}) => {
   console.log("...rebuilding cache");
-  console.log(queryDefinition.fullQuery)
+  console.log(queryDefinition.fullQuery);
   return fetchAllCode(queryDefinition.fullQuery, max)
     .then((gd) => decorators(gd))
     .then((gd) =>
-      argv.t
+      (argv.t
         ? Promise.resolve(gd)
         : cacheSet({ value: gd.export() }).then(() => gd)
-    );
+      )
+        .then((gd) => {
+          const mf = enumerateManifests(gd);
+          const data = {
+            repos: gd.repos.size,
+            owners: gd.owners.size,
+            files: gd.files.size,
+            shaxs: gd.shaxs.size,
+            advancedServices: mf.maps.advancedServices.size,
+            libraries: mf.maps.libraries.size,
+            timeZones: mf.maps.timeZones.size,
+            runtimeVersions: mf.maps.runtimeVersions.size,
+            webapps: mf.maps.webapps.size,
+            addOns: mf.maps.addOns.size,
+            oauthScopes: mf.maps.oauthScopes.size,
+            dataStudios: mf.maps.dataStudios.size,
+          };
+          console.log(data);
+        })
+        .then(() => gd)
+    )
+    .catch((err) => {
+      console.log("caught", err);
+    });
 };
 
 // preferably get from redis

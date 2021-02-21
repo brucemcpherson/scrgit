@@ -2,36 +2,34 @@ const { auth, gistAuth } = require("../secrets/git");
 const { queryDefinition } = require("./settings");
 const GitData = require("./classes/GitData");
 const { Octokit } = require("@octokit/rest");
+const Qottle = require("qottle");
+const delay = require("delay");
 
-const Qottle = require("qottle")
 const decorateQueue = new Qottle({
-  concurrent: 3
-})
+  concurrent: 5,
+});
 const searchQueue = new Qottle({
   concurrent: 1,
 });
-const octokit = new Octokit({
-  auth,
-  userAgent: "scrgit v1.0.1",
-});
 
-const octoGist = new Octokit({
+const octokit = new Octokit({
   auth: gistAuth,
   userAgent: "scrgist v1.0.1",
 });
 
-const getGistFiles = (content) => {
+const getGistFiles = (content, fileProp) => {
   const files = {};
-  files[queryDefinition.dataName] = {
+  files[fileProp || queryDefinition.dataName] = {
     content,
   };
   return files;
 };
-const gistCreate = ({ content="initial"} = {}) => {
-  return octoGist.gists
+
+const gc = ({ description, content, fileProp }) => {
+  return octokit.gists
     .create({
-      description: queryDefinition.query.q,
-      files: getGistFiles(content),
+      description,
+      files: getGistFiles(content, fileProp),
       public: true,
     })
     .then((r) => {
@@ -40,8 +38,16 @@ const gistCreate = ({ content="initial"} = {}) => {
     });
 };
 
+const gistCreate = ({ content = "initial" } = {}) => {
+  return gc({
+    description: queryDefinition.query.q,
+    content,
+    fileProp: queryDefinition.dataName,
+  });
+};
+
 const gistUpdate = ({ content = "initial" } = {}) => {
-  return octoGist.gists
+  return octokit.gists
     .update({
       files: getGistFiles(content),
       gist_id: queryDefinition.gistId,
@@ -50,6 +56,21 @@ const gistUpdate = ({ content = "initial" } = {}) => {
       console.log("updated gist", r.data.id, Object.keys(r.data.files));
       return r;
     });
+};
+
+const getRateInfo = (response) => {
+  const { headers } = response;
+
+  const ratelimitRemaining = headers["x-ratelimit-remaining"];
+  const ratelimitReset = headers["x-ratelimit-reset"];
+  return {
+    ratelimitRemaining,
+    ratelimitReset,
+    waitTime:
+      ratelimitRemaining > 1
+        ? 0
+        : Math.max(2500, ratelimitReset * 1000 - new Date().getTime()),
+  };
 };
 
 /**
@@ -61,8 +82,6 @@ const gitUntangle = (response, options) => {
   const { total_count } = data;
   const { status } = headers;
   const items = data.items || data;
-  const ratelimitRemaining = headers["x-ratelimit-remaining"];
-  const ratelimitReset = headers["x-ratelimit-reset"];
 
   // sometimes there's items, sometimes not
   if (total_count) {
@@ -79,18 +98,10 @@ const gitUntangle = (response, options) => {
     // these are needed
     items,
     total: total_count,
-    // this is how long the next attempt will have to wait before trying again
-    // wait an additional time to allow for missynced times
-    waitTime:
-      ratelimitRemaining > 1
-        ? 0
-        : Math.max(2500, ratelimitReset * 1000 - new Date().getTime()),
-    // this might be handy
-    ratelimitReset,
-    ratelimitRemaining,
     incomplete: data.incomplete_results,
     status,
     response,
+    ...getRateInfo(response),
   };
 };
 
@@ -112,7 +123,7 @@ const gitSearcher = ({ options, page = 0 } = {}) => {
     ...options,
     page,
   };
- 
+
   return octokit.search
     .code(searchOptions)
     .then((response) => gitUntangle(response, searchOptions));
@@ -148,12 +159,11 @@ const giterator = ({
   max = Infinity,
   transformer,
   initialWaitTime = 100,
-  minWait = 200
+  minWait = 200,
 }) => {
   return {
     [Symbol.asyncIterator]() {
       return {
-
         // whenther the last chunk has been received
         finished: false,
 
@@ -254,7 +264,7 @@ const giterator = ({
           // finished because we've had enough
           if (this.index >= max) {
             this.wrapup();
-            return Promise.resolve(false)
+            return Promise.resolve(false);
           }
 
           // havent done with those we already have
@@ -306,8 +316,7 @@ const giterator = ({
   };
 };
 
-const fetchAllCodePart = async ({ gd, options, max , range}) => {
-  
+const fetchAllCodePart = async ({ gd, options, max, range }) => {
   const transformer = ({ data }) => {
     return gd.add(data);
   };
@@ -325,7 +334,7 @@ const fetchAllCodePart = async ({ gd, options, max , range}) => {
   });
 
   for await (let { index, data, pack } of grate) {
-    console.log(index,data.repository.full_name, pack.waitTime)
+    console.log(index, data.repository.full_name, pack.waitTime);
   }
 
   return Promise.resolve(gd);
@@ -333,84 +342,123 @@ const fetchAllCodePart = async ({ gd, options, max , range}) => {
 
 const fetchAllCode = async (options, max) => {
   const gd = new GitData();
-  return Promise.all(queryDefinition.ranges.map(range => {
-    return searchQueue.add(() => {
-      return fetchAllCodePart({ gd, options, range, max })
+  return Promise.all(
+    queryDefinition.ranges.map((range) => {
+      return searchQueue.add(() => {
+        return fetchAllCodePart({ gd, options, range, max });
+      });
     })
-  })).then (()=> gd)
-
+  ).then(() => gd);
 };
-const decorateOwner = (owner) => {
-  return octokit.request(`GET /users/${owner.fields.login}`).then((r) => {
-    owner.decorate(r.data);
-    return owner;
+
+const getWithWait = (what, tries = 0) => {
+  return what().catch((qe) => {
+    const { error } = qe;
+    const { status } = error;
+    // we get a 403 for rate limit exceeded (why not 429?)
+    if ((status !== 403 && status !== 429) || tries > 3)
+      return Promise.reject(qe);
+    const { waitTime } = getRateInfo(error);
+    console.log("....waiting", waitTime);
+    // try again
+    return delay(waitTime).then(() => getWithWait(what, tries + 1));
   });
+};
+
+const decorateOwner = (owner) => {
+  return getWithWait(() =>
+    octokit.request(`GET /users/${owner.fields.login}`).then((r) => {
+      owner.decorate(r.data);
+      return owner;
+    })
+  );
 };
 
 const decorators = (gd) => {
   const po = Promise.all(
     gd.items("owners").map((f) => decorateQueue.add(() => decorateOwner(f)))
-  ).then(()=>console.log(`....decorated ${gd.items("owners").length} owners`));
+  )
+    .then(() =>
+      console.log(`....decorated ${gd.items("owners").length} owners`)
+    )
+    .catch((err) => {
+      console.log("decorators owners", err);
+    });
 
-  const pr = Promise.resolve()
-
-  const pf = Promise.resolve ()
+  const pf = Promise.all(
+    gd.items("files").map((f) => decorateQueue.add(() => decorateFile(f)))
+  )
+    .then(() => console.log(`....decorated ${gd.items("files").length} files`))
+    .catch((err) => {
+      console.log("decorators files", err);
+    });
 
   const ps = Promise.all(
     gd.items("shaxs").map((f) => decorateQueue.add(() => decorateShax(f)))
-  ).then(() =>
-    console.log(`....decorated ${gd.items("shaxs").length} shaxs`)
-  );
-
+  )
+    .then(() => console.log(`....decorated ${gd.items("shaxs").length} shaxs`))
+    .catch((err) => {
+      console.log("shax", err);
+    });
+  const pr = Promise.resolve();
   return Promise.all([po, pr, pf, ps]).then(() => gd);
 };
 
-
-const decorateRepo =  (repo) => {
-  // this is deprec - no longer bothering with this
-  /*
-  const body = {
-    stargazers: 0,
-  };
-
-  const grate = giterator({
-    options: {
-      owner: repo.fields.full_name.replace(/(.*)\/(.*)/, "$1"),
-      repo: repo.fields.full_name.replace(/(.*)\/(.*)/, "$2"),
-    },
-    fetcher: gitGazers,
-  });
-
-  for await (const { report } of grate) {
-    body.stargazers++;
+const tidyParse = (buf) => {
+  let c = "";
+  try {
+    c = Buffer.from(buf, "base64").toString("utf8");
+    // this double parsing is a hack to dispose of trailing commas in json
+    const t = JSON.stringify(c);
+    return t ? JSON.parse(JSON.parse(t)) : null;
+  } catch (err) {
+    console.log("failed to parse content", c);
+    return null;
   }
-
-  repo.decorate(body);
-  */
-  return Promise.resolve(repo);
 };
 
 const decorateFile = (file) => {
-  /** not bother with this
-   * its now donw at sha level
-   */
-  // this gets the content of the appsscript file
-  /*
-  const base = `GET /repos/${file.fields.repoFullName}/git/blobs/${file.fields.sha}`;
-  return octokit.request(base).then((r) => {
-    file.decorate({
-      content: Buffer.from(r.data.content, "base64").toString("utf8"),
-    });
-    return file;
-  });
-  */
+  return getWithWait(() => decorateFileWork(file));
 };
 const decorateShax = (shax) => {
+  return getWithWait(() => decorateShaxWork(shax));
+};
+
+const decorateFileWork = (file) => {
+  const path = file.fields.path.replace("appsscript.json", ".clasp.json");
+  const owner = file.fields.repoFullName.replace(/(.*)\/(.*)/, "$1");
+  const repo = file.fields.repoFullName.replace(/(.*)\/(.*)/, "$2");
+
+  return octokit.repos
+    .getContent({
+      owner,
+      repo,
+      path,
+    })
+    .then((r) => {
+      const c = tidyParse(r.data.content);
+      file.decorate({
+        scriptId: c && c.scriptId,
+        claspHtmlUrl: r.data.html_url,
+      });
+      return file;
+    })
+
+    .catch((error) => {
+      // it's fine to have a 404 - in fact more often than not
+      if (error.status !== 404) {
+        console.log(error);
+        return Promise.reject(error);
+      }
+    });
+};
+const decorateShaxWork = (shax) => {
   // this gets the content of the appsscript file
   const base = `GET /repos/${shax.fields.repoFullName}/git/blobs/${shax.fields.sha}`;
   return octokit.request(base).then((r) => {
+    const content = tidyParse(r.data.content);
     shax.decorate({
-      content: Buffer.from(r.data.content, "base64").toString("utf8"),
+      content,
     });
     return shax;
   });

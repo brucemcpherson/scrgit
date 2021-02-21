@@ -1,7 +1,7 @@
-
 const writeJsonFile = require("write-json-file");
 const loadJsonFile = require("load-json-file");
 const { cacheSet } = require("./src/cache");
+const { compress, decompress } = require("./src/compress");
 const argv = require("yargs/yargs")(process.argv.slice(2)).usage(
   "$0 -t -n f1,f2,f3.. -o output"
 ).argv;
@@ -19,8 +19,8 @@ const merge = async (names) => {
     shaxs: 0,
     files: 0,
     repos: 0,
-    owners: 0
-  }
+    owners: 0,
+  };
   const files = await Promise.all(names.map(loadJsonFile));
   files.forEach((file, i) => {
     Object.keys(file).forEach((k) => {
@@ -32,15 +32,19 @@ const merge = async (names) => {
       });
     });
   });
-  return Object.keys(nob).reduce((p, c) => { 
-    p.nob[c] = Array.from(nob[c].values())
-    return p;
-  }, { sob, nob: {}})
+  return Object.keys(nob).reduce(
+    (p, c) => {
+      p.nob[c] = Array.from(nob[c].values());
+      return p;
+    },
+    { sob, nob: {} }
+  );
 };
 
-(async () => { 
-  const r = await merge(argv.n.split(","))
-  console.log(r.sob)
-  await argv.o ? writeJsonFile(argv.o, r.nob) : Promise.resolve(null)
-  await argv.t ? Promise.resolve(null) : cacheSet({ value: r.nob })
-})()
+(async () => {
+  const r = await merge(argv.n.split(","));
+  console.log(r.sob);
+  const value = r.nob;
+  await (argv.o ? writeJsonFile(argv.o, value) : Promise.resolve(null));
+  (await argv.t) ? Promise.resolve(null) : cacheSet({ value });
+})();
