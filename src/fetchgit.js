@@ -5,9 +5,11 @@ const { Octokit } = require("@octokit/rest");
 const Qottle = require("qottle");
 const delay = require("delay");
 
-const decorateQueue = new Qottle({
-  concurrent: 5,
-});
+const { default: PQueue } = require("p-queue");
+
+
+const decorateQueue = new PQueue({ concurrency: 1 });
+
 const searchQueue = new Qottle({
   concurrent: 1,
 });
@@ -129,17 +131,6 @@ const gitSearcher = ({ options, page = 0 } = {}) => {
     .then((response) => gitUntangle(response, searchOptions));
 };
 
-// not using this any more
-const gitGazers = ({ options, page = 0 } = {}) => {
-  const searchOptions = {
-    per_page: 10,
-    ...options,
-    page,
-  };
-  return octokit.activity
-    .listStargazersForRepo(searchOptions)
-    .then((response) => gitUntangle(response, searchOptions));
-};
 
 /**
  * make an iterator
@@ -352,12 +343,11 @@ const fetchAllCode = async (options, max) => {
 };
 
 const getWithWait = (what, tries = 0) => {
-  return what().catch((qe) => {
-    const { error } = qe;
+  return what().catch((error) => {
     const { status } = error;
     // we get a 403 for rate limit exceeded (why not 429?)
     if ((status !== 403 && status !== 429) || tries > 3)
-      return Promise.reject(qe);
+      return Promise.reject(error);
     const { waitTime } = getRateInfo(error);
     console.log("....waiting", waitTime);
     // try again
@@ -424,33 +414,48 @@ const decorateShax = (shax) => {
   return getWithWait(() => decorateShaxWork(shax));
 };
 
+const octoCheck = ({ owner, repo, path }) => {
+  return octokit.repos.getContent({
+    method: "HEAD",
+    owner,
+    repo,
+    path,
+  }).then(r => true).catch(error => {
+    if (error.status === 404) {
+      return false;
+    }
+    return error.status === 404 ? Promise.resolve(false) : Promise.reject(error)
+  })
+};
+
+
 const decorateFileWork = (file) => {
   const path = file.fields.path.replace("appsscript.json", ".clasp.json");
   const owner = file.fields.repoFullName.replace(/(.*)\/(.*)/, "$1");
   const repo = file.fields.repoFullName.replace(/(.*)\/(.*)/, "$2");
+  return octoCheck({
+    owner,
+    repo,
+    path,
+  }).then(exists => {
+    if (exists) {
+      return octokit.repos
+        .getContent({
+          owner,
+          repo,
+          path,
+        })
+        .then((r) => {
+          const c = tidyParse(r.data.content);
+          file.decorate({
+            scriptId: c && c.scriptId,
+            claspHtmlUrl: r.data.html_url,
+          });
+          return file;
+        })
+    } 
+  })
 
-  return octokit.repos
-    .getContent({
-      owner,
-      repo,
-      path,
-    })
-    .then((r) => {
-      const c = tidyParse(r.data.content);
-      file.decorate({
-        scriptId: c && c.scriptId,
-        claspHtmlUrl: r.data.html_url,
-      });
-      return file;
-    })
-
-    .catch((error) => {
-      // it's fine to have a 404 - in fact more often than not
-      if (error.status !== 404) {
-        console.log(error);
-        return Promise.reject(error);
-      }
-    });
 };
 const decorateShaxWork = (shax) => {
   // this gets the content of the appsscript file
