@@ -41,6 +41,7 @@ const makeCache = ({ max = Infinity } = {}) => {
             addOns: mf.maps.addOns.size,
             oauthScopes: mf.maps.oauthScopes.size,
             dataStudios: mf.maps.dataStudios.size,
+            claspProjects: Array.from(mf.maps.files).filter(f=>f.fields.claspHtml).length
           };
           console.log(data);
         })
@@ -99,28 +100,16 @@ const getFromCache = async ({ noCache, max }) => {
       addOns: mf.maps.addOns.size,
       oauthScopes: mf.maps.oauthScopes.size,
       dataStudios: mf.maps.dataStudios.size,
+      claspProjects: Array.from(gd.files.values()).filter(
+        (f) => f.fields.claspHtmlUrl
+      ).length,
+      
     });
     console.log(
       "...done after",
       ((new Date().getTime() - started) / 1000 / 60).toFixed(2),
       "mins"
     );
-    //console.log(JSON.stringify(Array.from(gd.shaxs.values()).map(f=>f)))
-    /*
-    console.log(Array.from(mf.maps.advancedServices));
-    console.log(Array.from(mf.maps.libraries));
-    console.log(Array.from(mf.maps.timeZones));
-    console.log(Array.from(mf.maps.runtimeVersions));
-    console.log(Array.from(mf.maps.webapps));
-    console.log(Array.from(mf.maps.addOns));
-    console.log(Array.from(mf.maps.oauthScopes));
-    console.log(mf.labels("libraries"));
-    console.log(mf.labels("advancedServices"));
-    console.log(mf.labels("timeZones"));
-    console.log(mf.labels("runtimeVersions"));
-    console.log(mf.labels("webapps"));
-    console.log(mf.labels("addOns"));
-    console.log(mf.labels("oauthScopes"));
-    */
+
   }
 })();
