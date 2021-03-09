@@ -7,7 +7,6 @@ const delay = require("delay");
 
 const { default: PQueue } = require("p-queue");
 
-
 const decorateQueue = new PQueue({ concurrency: 1 });
 
 const searchQueue = new Qottle({
@@ -130,7 +129,6 @@ const gitSearcher = ({ options, page = 0 } = {}) => {
     .code(searchOptions)
     .then((response) => gitUntangle(response, searchOptions));
 };
-
 
 /**
  * make an iterator
@@ -364,12 +362,50 @@ const decorateOwner = (owner) => {
   );
 };
 
-const decorators = (gd) => {
-  const po = Promise.all(
-    gd.items("owners").map((f) => decorateQueue.add(() => decorateOwner(f)))
-  )
+const attachProfiles = (profiles, gd) => {
+  profiles.files.forEach((file) => {
+    console.log(file);
+    const owner = gd.owners.get(file.fields.ownerId);
+    const shax = profiles.shaxs.get(file.fields.sha);
+    // now we can validate that the owner matches the repo owner
+    // this will prevent people registering phony profiles on behalf of others
+    const scrviz = shax &&
+      shax.fields &&
+      shax.fields.content &&
+      shax.fields.content.scrviz 
+    const contentOwner = scrviz && scrviz.owner &&
+      scrviz.owner.name;
+    
+    if (!contentOwner) {
+      console.log('...theres no scrviz owner for - skipping', shax)
+    } else if (contentOwner !== owner.fields.login) {
+      console.log("...PROFILE NOT OWNED BY CORRECT OWNER", contentOwner, owner.login, shax);
+      // scrap it as it's not trustable
+      shax.fields.content.scrviz = null;
+    } else { 
+      console.log('....found a profile for', contentOwner)
+      owner.fields.scrviz = scrviz
+    }
+    console.log(owner, shax);
+  });
+};
+const decorators = (profiles, gd) => {
+  const pp = Promise.all(
+    Array.from(profiles.shaxs.values()).map((f) =>
+      decorateQueue.add(() => decorateProfile(f))
+    )
+  ).then(() => {
+    return attachProfiles(profiles, gd);
+  });
+
+  // need the profiles to be all over first.
+  const po = pp
     .then(() =>
-      console.log(`....decorated ${gd.items("owners").length} owners`)
+      Promise.all(
+        gd.items("owners").map((f) => decorateQueue.add(() => decorateOwner(f)))
+      ).then(() =>
+        console.log(`....decorated ${gd.items("owners").length} owners`)
+      )
     )
     .catch((err) => {
       console.log("decorators owners", err);
@@ -413,21 +449,27 @@ const decorateFile = (file) => {
 const decorateShax = (shax) => {
   return getWithWait(() => decorateShaxWork(shax));
 };
-
-const octoCheck = ({ owner, repo, path }) => {
-  return octokit.repos.getContent({
-    method: "HEAD",
-    owner,
-    repo,
-    path,
-  }).then(r => true).catch(error => {
-    if (error.status === 404) {
-      return false;
-    }
-    return error.status === 404 ? Promise.resolve(false) : Promise.reject(error)
-  })
+const decorateProfile = (profile) => {
+  return getWithWait(() => decorateShaxWork(profile));
 };
-
+const octoCheck = ({ owner, repo, path }) => {
+  return octokit.repos
+    .getContent({
+      method: "HEAD",
+      owner,
+      repo,
+      path,
+    })
+    .then((r) => true)
+    .catch((error) => {
+      if (error.status === 404) {
+        return false;
+      }
+      return error.status === 404
+        ? Promise.resolve(false)
+        : Promise.reject(error);
+    });
+};
 
 const decorateFileWork = (file) => {
   const path = file.fields.path.replace("appsscript.json", ".clasp.json");
@@ -437,7 +479,7 @@ const decorateFileWork = (file) => {
     owner,
     repo,
     path,
-  }).then(exists => {
+  }).then((exists) => {
     if (exists) {
       return octokit.repos
         .getContent({
@@ -452,10 +494,9 @@ const decorateFileWork = (file) => {
             claspHtmlUrl: r.data.html_url,
           });
           return file;
-        })
-    } 
-  })
-
+        });
+    }
+  });
 };
 const decorateShaxWork = (shax) => {
   // this gets the content of the appsscript file

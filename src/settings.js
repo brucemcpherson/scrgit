@@ -14,6 +14,9 @@ const queryDefinition = {
   query: {
     q: "filename:appsscript extension:.json",
   },
+  profileQuery: {
+    q: "filename:scrviz-profile extension:.json",
+  },
   sorting: " sort:indexed",
   keyId: "scrgit",
   get fullQuery() {

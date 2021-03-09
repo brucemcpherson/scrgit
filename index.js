@@ -14,21 +14,23 @@ const argv = require("yargs/yargs")(process.argv.slice(2)).usage(
 // make redis from scratchyarn ad
 const makeCache = ({ max = Infinity } = {}) => {
   console.log("...rebuilding cache");
-  console.log(queryDefinition.fullQuery);
-  return fetchAllCode(queryDefinition.fullQuery, max)
-    .then((gd) => decorators(gd))
-    .then((gd) =>
-      (argv.t
-        ? Promise.resolve(gd)
-        : cacheSet({ value: gd.export() }).then(() => gd)
-      ).then((gd) => {
-        const mf = enumerateManifests(gd);
-        return gd;
-      })
-    )
-    .catch((err) => {
-      console.log("caught", err);
-    });
+  // get profiles
+  return fetchAllCode(queryDefinition.profileQuery, max).then((profiles) => {
+    return fetchAllCode(queryDefinition.fullQuery, max)
+      .then((gd) => decorators(profiles,gd))
+      .then((gd) =>
+        (argv.t
+          ? Promise.resolve(gd)
+          : cacheSet({ value: gd.export() }).then(() => gd)
+        ).then((gd) => {
+          const mf = enumerateManifests(gd);
+          return gd;
+        })
+      )
+      .catch((err) => {
+        console.log("caught", err);
+      });
+  });
 };
 
 // preferably get from redis
