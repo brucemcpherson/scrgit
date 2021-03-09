@@ -1,0 +1,30 @@
+{
+  "scrviz": {
+    "owner": {
+      "name": "brucemcpherson",
+      "rows": [
+        {
+          "description": "Google developer expert",
+          "link": "https://developers.google.com/community/experts/directory/profile/profile-bruce_mcpherson",
+          "tip": "G Suite and Identity GDE since 2013",
+          "icon": "mdi-code-tags",
+          "visible": true
+        },
+        {
+          "description": "O'reilly author",
+          "link": "https://www.oreilly.com/pub/au/6781",
+          "tip": "Author of Going Gas - VBA to Apps Script",
+          "icon": "mdi-book-education",
+          "visible": true
+        },
+        {
+          "description": "Video channel",
+          "link": "https://www.youtube.com/c/BruceMcpherson",
+          "tip": "Youtube channel",
+          "icon": "mdi-youtube",
+          "visible": true
+        }
+      ]
+    }
+  }
+}

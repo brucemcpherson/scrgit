@@ -2,11 +2,7 @@ const GitData = require("./src/classes/GitData");
 const { enumerateManifests } = require("./src/gasser");
 const { queryDefinition } = require("./src/settings");
 
-const {
-  fetchAllCode,
-  decorators,
-  gistCreate
-} = require("./src/fetchgit");
+const { fetchAllCode, decorators, gistCreate } = require("./src/fetchgit");
 
 const { cacheGet, cacheSet } = require("./src/cache");
 const writeJsonFile = require("write-json-file");
@@ -25,27 +21,10 @@ const makeCache = ({ max = Infinity } = {}) => {
       (argv.t
         ? Promise.resolve(gd)
         : cacheSet({ value: gd.export() }).then(() => gd)
-      )
-        .then((gd) => {
-          const mf = enumerateManifests(gd);
-          const data = {
-            repos: gd.repos.size,
-            owners: gd.owners.size,
-            files: gd.files.size,
-            shaxs: gd.shaxs.size,
-            advancedServices: mf.maps.advancedServices.size,
-            libraries: mf.maps.libraries.size,
-            timeZones: mf.maps.timeZones.size,
-            runtimeVersions: mf.maps.runtimeVersions.size,
-            webapps: mf.maps.webapps.size,
-            addOns: mf.maps.addOns.size,
-            oauthScopes: mf.maps.oauthScopes.size,
-            dataStudios: mf.maps.dataStudios.size,
-            claspProjects: Array.from(mf.maps.files).filter(f=>f.fields.claspHtml).length
-          };
-          console.log(data);
-        })
-        .then(() => gd)
+      ).then((gd) => {
+        const mf = enumerateManifests(gd);
+        return gd;
+      })
     )
     .catch((err) => {
       console.log("caught", err);
@@ -103,13 +82,11 @@ const getFromCache = async ({ noCache, max }) => {
       claspProjects: Array.from(gd.files.values()).filter(
         (f) => f.fields.claspHtmlUrl
       ).length,
-      
     });
     console.log(
       "...done after",
       ((new Date().getTime() - started) / 1000 / 60).toFixed(2),
       "mins"
     );
-
   }
 })();
