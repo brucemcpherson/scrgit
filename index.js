@@ -84,6 +84,7 @@ const getFromCache = async ({ noCache, max }) => {
       claspProjects: Array.from(gd.files.values()).filter(
         (f) => f.fields.claspHtmlUrl
       ).length,
+      profiles: Array.from(gd.owners.values()).filter(f=>f.fields.scrviz).length
     });
     console.log(
       "...done after",

@@ -364,7 +364,7 @@ const decorateOwner = (owner) => {
 
 const attachProfiles = (profiles, gd) => {
   profiles.files.forEach((file) => {
-    console.log(file);
+   
     const owner = gd.owners.get(file.fields.ownerId);
     const shax = profiles.shaxs.get(file.fields.sha);
     // now we can validate that the owner matches the repo owner
@@ -374,7 +374,7 @@ const attachProfiles = (profiles, gd) => {
       shax.fields.content &&
       shax.fields.content.scrviz 
     const contentOwner = scrviz && scrviz.owner &&
-      scrviz.owner.name;
+      scrviz.owner.login;
     
     if (!contentOwner) {
       console.log('...theres no scrviz owner for - skipping', shax)
@@ -386,7 +386,7 @@ const attachProfiles = (profiles, gd) => {
       console.log('....found a profile for', contentOwner)
       owner.fields.scrviz = scrviz
     }
-    console.log(owner, shax);
+    
   });
 };
 const decorators = (profiles, gd) => {
