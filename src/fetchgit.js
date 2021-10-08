@@ -1,21 +1,18 @@
-const { auth, gistAuth } = require("../secrets/git");
+const { gitAuth } = require("../secrets/git");
 const { queryDefinition } = require("./settings");
 const GitData = require("./classes/GitData");
 const { Octokit } = require("@octokit/rest");
-const Qottle = require("qottle");
+
 const delay = require("delay");
 
 const { default: PQueue } = require("p-queue");
 
 const decorateQueue = new PQueue({ concurrency: 1 });
 
-const searchQueue = new Qottle({
-  concurrent: 1,
-});
-
+const searchQueue = new PQueue({ concurrency: 1 });
 const octokit = new Octokit({
-  auth: gistAuth,
-  userAgent: "scrgist v1.0.1",
+  auth: gitAuth,
+  userAgent: "brucemcpherson/scrgit v1.0.3",
 });
 
 const getGistFiles = (content, fileProp) => {
@@ -64,12 +61,13 @@ const getRateInfo = (response) => {
 
   const ratelimitRemaining = headers["x-ratelimit-remaining"];
   const ratelimitReset = headers["x-ratelimit-reset"];
+
   return {
     ratelimitRemaining,
     ratelimitReset,
     waitTime:
       ratelimitRemaining > 1
-        ? 0
+        ? 100
         : Math.max(2500, ratelimitReset * 1000 - new Date().getTime()),
   };
 };
@@ -148,7 +146,7 @@ const giterator = ({
   max = Infinity,
   transformer,
   initialWaitTime = 100,
-  minWait = 200,
+  minWait = 500,
 }) => {
   return {
     [Symbol.asyncIterator]() {
@@ -164,6 +162,8 @@ const giterator = ({
 
         // the full set of items kept if keepAll is true
         items: [],
+
+        bannedCount: 0,
 
         // how long to wait before going
         waitTime() {
@@ -189,11 +189,7 @@ const giterator = ({
           const waitTime = this.waitTime() + minWait;
           this.stats.totalWaitTime += waitTime;
           if (waitTime > minWait) console.log("...waiting for", waitTime);
-          return waitTime
-            ? new Promise((resolve) =>
-                setTimeout(() => resolve(waitTime), waitTime)
-              )
-            : Promise.resolve(0);
+          return delay(waitTime);
         },
 
         // report might be called when iteration is over
@@ -216,28 +212,54 @@ const giterator = ({
             this.stats.startedAt = new Date().getTime();
           }
 
-          return this.waiter().then(() =>
-            fetcher({ options, page: this.page }).then((pack) => {
-              // if we didnt get anything, then assume its all over
-              this.pack = pack;
-              const { items } = pack;
-              this.stats.numberOfFetches++;
+          return this.waiter()
+            .then(() =>
+              fetcher({ options, page: this.page }).then((pack) => {
+                // if we didnt get anything, then assume its all over
+                this.pack = pack;
+                const { items } = pack;
+                this.stats.numberOfFetches++;
+                this.bannedCount = 0;
 
-              if (!items.length) {
-                this.wrapup();
-              } else {
-                // this is whether we need to keep all the results ever got
-                if (keepAll) {
-                  Array.prototype.push.apply(this.items, items);
+                if (!items.length) {
+                  this.wrapup();
                 } else {
-                  this.items = items;
-                  this.itemIndex = 0;
+                  // this is whether we need to keep all the results ever got
+                  if (keepAll) {
+                    Array.prototype.push.apply(this.items, items);
+                  } else {
+                    this.items = items;
+                    this.itemIndex = 0;
+                  }
                 }
+                // ready for next page
+                this.page++;
+              })
+            )
+            .catch((err) => {
+              // mabe this is an abuse thing - retry after doesn't seem tot be set so we cant use that
+              if (err.status === 403) {
+                this.bannedCount++;
+                const { headers } = err || {};
+                const retryAfter = parseInt(headers["retry-after"], 10) || 0;
+                if (this.bannedCount > 5) {
+                  return Promise.reject(err);
+                } else {
+                  const delayTime = Math.max(
+                    retryAfter * 1000,
+                    Math.pow(2, this.bannedCount) * 15000
+                  );
+                  console.log(
+                    "banned and wait a bit:attempt",
+                    this.bannedCount,
+                    delayTime
+                  );
+                  return delay(delayTime).then(() => this.getMore());
+                }
+              } else {
+                return Promise.reject(err);
               }
-              // ready for next page
-              this.page++;
-            })
-          );
+            });
         },
 
         wrapup() {
@@ -309,12 +331,13 @@ const fetchAllCodePart = async ({ gd, options, max, range }) => {
   const transformer = ({ data }) => {
     return gd.add(data);
   };
-
+  const q = `${options.q}${range ? " " + range : ""}`;
+  console.log("....querying", q);
   // iterator to go through the whole thing
   const grate = giterator({
     options: {
       ...options,
-      q: `${options.q} ${range}`,
+      q,
     },
     max,
     transformer,
@@ -329,13 +352,18 @@ const fetchAllCodePart = async ({ gd, options, max, range }) => {
   return Promise.resolve(gd);
 };
 
-const fetchAllCode = async (options, max) => {
+const fetchAllCode = async (options, max, ranges = [""]) => {
   const gd = new GitData();
   return Promise.all(
-    queryDefinition.ranges.map((range) => {
-      return searchQueue.add(() => {
-        return fetchAllCodePart({ gd, options, range, max });
-      });
+    ranges.map((range) => {
+      return searchQueue
+        .add(() => {
+          return fetchAllCodePart({ gd, options, range, max });
+        })
+        .catch((err) => {
+          console.log("failed fetchallcode", err, options);
+          return Promise.reject(err);
+        });
     })
   ).then(() => gd);
 };
@@ -362,31 +390,62 @@ const decorateOwner = (owner) => {
   );
 };
 
+const attachRepoProfiles = (gd) => {
+  // the objective here is to attach repo information from scrviz profiles to the given repos
+  gd.owners.forEach((owner) => {
+    // most owners wont have scrviz profiles
+    if (owner.fields.scrviz) {
+      const { repos } = owner.fields.scrviz;
+      if (repos) {
+        // the repo is keyed by its id, not its name, so first find all repos owned by this guy
+        const orepos = Array.from(gd.repos.values()).filter(
+          (f) => f.ownerId === owner.id
+        );
+        repos.forEach((rv) => {
+          const target = `${owner.fields.login}/${rv.repo}`;
+          const t = orepos.find((f) => f.fields.full_name === target);
+          if (!t) {
+            console.log("failed to find scrviz profile repo", target);
+          } else {
+            // decorate the repo
+            t.fields.scrviz = {
+              repo: rv,
+            };
+          }
+        });
+      }
+    }
+  });
+};
+
 const attachProfiles = (profiles, gd) => {
   profiles.files.forEach((file) => {
-   
     const owner = gd.owners.get(file.fields.ownerId);
+    if (!owner) {
+      console.log("damn - no owner for", file.fields);
+    }
     const shax = profiles.shaxs.get(file.fields.sha);
     // now we can validate that the owner matches the repo owner
     // this will prevent people registering phony profiles on behalf of others
-    const scrviz = shax &&
-      shax.fields &&
-      shax.fields.content &&
-      shax.fields.content.scrviz 
-    const contentOwner = scrviz && scrviz.owner &&
-      scrviz.owner.login;
-    
+    const scrviz =
+      shax && shax.fields && shax.fields.content && shax.fields.content.scrviz;
+    const contentOwner = scrviz && scrviz.owner && scrviz.owner.login;
+
     if (!contentOwner) {
-      console.log('...theres no scrviz owner for - skipping', shax)
-    } else if (contentOwner !== owner.fields.login) {
-      console.log("...PROFILE NOT OWNED BY CORRECT OWNER", contentOwner, owner.login, shax);
+      console.log("...theres no scrviz owner for - skipping", shax);
+    } else if (!owner || contentOwner !== owner.fields.login) {
+      console.log(
+        "...PROFILE NOT OWNED BY CORRECT OWNER",
+        contentOwner,
+        owner && owner.login,
+        shax
+      );
       // scrap it as it's not trustable
       shax.fields.content.scrviz = null;
-    } else { 
-      console.log('....found a profile for', contentOwner)
-      owner.fields.scrviz = scrviz
+    } else {
+      console.log("....found a profile for", contentOwner);
+      owner.fields.scrviz = scrviz;
     }
-    
   });
 };
 const decorators = (profiles, gd) => {
@@ -394,9 +453,11 @@ const decorators = (profiles, gd) => {
     Array.from(profiles.shaxs.values()).map((f) =>
       decorateQueue.add(() => decorateProfile(f))
     )
-  ).then(() => {
-    return attachProfiles(profiles, gd);
-  });
+  )
+
+    .then(() => {
+      return attachProfiles(profiles, gd);
+    });
 
   // need the profiles to be all over first.
   const po = pp
@@ -412,7 +473,12 @@ const decorators = (profiles, gd) => {
     });
 
   const pf = Promise.all(
-    gd.items("files").map((f) => decorateQueue.add(() => decorateFile(f)))
+    gd
+      .items("files")
+      .map((f) => decorateQueue.add(() => decorateFile(f)))
+      .concat(
+        gd.items("files").map((f) => decorateQueue.add(() => decorateInfo(f)))
+      )
   )
     .then(() => console.log(`....decorated ${gd.items("files").length} files`))
     .catch((err) => {
@@ -426,7 +492,12 @@ const decorators = (profiles, gd) => {
     .catch((err) => {
       console.log("shax", err);
     });
-  const pr = Promise.resolve();
+  // decorating the repos requires the owner decoration to be complete as scrviz repo information
+  // is inherited from there and it will have weeded out fake owners if we take it from there
+  const pr = po.then(() => {
+    return attachRepoProfiles(gd);
+  });
+
   return Promise.all([po, pr, pf, ps]).then(() => gd);
 };
 
@@ -445,6 +516,9 @@ const tidyParse = (buf) => {
 
 const decorateFile = (file) => {
   return getWithWait(() => decorateFileWork(file));
+};
+const decorateInfo = (file) => {
+  return getWithWait(() => decorateInfoWork(file));
 };
 const decorateShax = (shax) => {
   return getWithWait(() => decorateShaxWork(shax));
@@ -470,34 +544,65 @@ const octoCheck = ({ owner, repo, path }) => {
         : Promise.reject(error);
     });
 };
-
-const decorateFileWork = (file) => {
-  const path = file.fields.path.replace("appsscript.json", ".clasp.json");
+const _patchFileName = (file, patch) => {
+  const path = file.fields.path.replace("appsscript.json", patch);
   const owner = file.fields.repoFullName.replace(/(.*)\/(.*)/, "$1");
   const repo = file.fields.repoFullName.replace(/(.*)\/(.*)/, "$2");
+  return {
+    path,
+    owner,
+    repo,
+    file,
+  };
+};
+const _getTheFileContent = ({ path, owner, repo }) => {
   return octoCheck({
     owner,
     repo,
     path,
   }).then((exists) => {
     if (exists) {
-      return octokit.repos
-        .getContent({
-          owner,
-          repo,
-          path,
-        })
-        .then((r) => {
-          const c = tidyParse(r.data.content);
-          file.decorate({
-            scriptId: c && c.scriptId,
-            claspHtmlUrl: r.data.html_url,
-          });
-          return file;
-        });
+      console.log("...found scriptId clue file", owner, repo, path);
+      return octokit.repos.getContent({
+        owner,
+        repo,
+        path,
+      });
+    } else {
+      return null;
     }
   });
 };
+const decorateInfoWork = (file) => {
+  if (file.fields.scriptId) {
+    return Promise.resolve(file);
+  }
+  const p = _patchFileName(file, "info.json");
+  return _getTheFileContent(p).then((r) => {
+    if (r) {
+      const c = tidyParse(r.data.content);
+      file.decorate({
+        scriptId: c && c.id,
+      });
+    }
+    return file;
+  });
+};
+
+const decorateFileWork = (file) => {
+  const p = _patchFileName(file, ".clasp.json");
+  return _getTheFileContent(p).then((r) => {
+    if (r) {
+      const c = tidyParse(r.data.content);
+      file.decorate({
+        scriptId: c && c.scriptId,
+        claspHtmlUrl: r.data.html_url,
+      });
+    }
+    return file;
+  });
+};
+
 const decorateShaxWork = (shax) => {
   // this gets the content of the appsscript file
   const base = `GET /repos/${shax.fields.repoFullName}/git/blobs/${shax.fields.sha}`;

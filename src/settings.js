@@ -12,7 +12,7 @@ const getKey = (key, keyId = "cache") => {
 
 const queryDefinition = {
   query: {
-    q: "filename:appsscript extension:.json",
+    q:"filename:appsscript.json" //user:brucemcpherson"
   },
   profileQuery: {
     q: "filename:scrviz-profile extension:.json",
@@ -36,7 +36,8 @@ const queryDefinition = {
     "size:<100",
     "size:100..199",
     "size:200..299",
-    "size:300..399",
+    "size:300..350",
+    "size:351..399",
     "size:400..499",
     "size:500..599",
     "size:>599",

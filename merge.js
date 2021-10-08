@@ -1,9 +1,9 @@
 const writeJsonFile = require("write-json-file");
 const loadJsonFile = require("load-json-file");
 const { cacheSet } = require("./src/cache");
-const { compress, decompress } = require("./src/compress");
+const { init: psInit } = require("./src/psdo");
 const argv = require("yargs/yargs")(process.argv.slice(2)).usage(
-  "$0 -t -n f1,f2,f3.. -o output"
+  "$0 -t -n -p f1,f2,f3.. -o output"
 ).argv;
 
 const merge = async (names) => {
@@ -41,10 +41,32 @@ const merge = async (names) => {
   );
 };
 
+const publish = (connection) => {
+  return connection.publish({
+    name: "scrgit.topicName",
+    ob: {
+      timestamp: new Date().getTime(),
+      workType: "scrgit",
+    },
+  });
+};
 (async () => {
+  // initialize pubsub
+  const ps = psInit();
+
+  // merge all the files
   const r = await merge(argv.n.split(","));
   console.log(r.sob);
   const value = r.nob;
+  // if there's an output file needed then do that
   await (argv.o ? writeJsonFile(argv.o, value) : Promise.resolve(null));
-  (await argv.t) ? Promise.resolve(null) : cacheSet({ value });
+
+  // write to cache if necessary
+  const cached = (await argv.t) ? Promise.resolve(null) : cacheSet({ value });
+  cached.then((r) => {
+    // publish a process message - can still publish even if cache is not updated
+    // to forece a pub anyway
+    // we're not doing upstash yet as the value is too large
+    return argv.p ? publish(ps) : Promise.resolve(null);
+  });
 })();

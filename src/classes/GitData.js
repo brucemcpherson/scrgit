@@ -40,7 +40,6 @@ class GitData {
     return this;
   }
 
-
   add(data) {
     const file = new GitFile(data);
     this.files.set(file.fields.id, file);
@@ -62,6 +61,7 @@ class GitData {
       const owner = new GitOwner(data);
       this.owners.set(owner.fields.id, owner);
     }
+
     return this.owners.get(data.repository.owner.id);
   }
 
@@ -83,7 +83,6 @@ class GitData {
     const items = this.items(type);
     return items.map((f) => f.fields);
   }
-
 }
 
 module.exports = GitData;

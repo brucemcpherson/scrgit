@@ -6,6 +6,7 @@
   "author": "bruce mcpherson",
   "license": "MIT",
   "dependencies": {
+    "@google-cloud/pubsub": "^2.10.0",
     "@octokit/rest": "^18.0.12",
     "delay": "^5.0.0",
     "got": "^11.8.1",
@@ -13,6 +14,7 @@
     "lz-string": "^1.4.4",
     "object-hash": "^2.1.1",
     "p-queue": "^6.6.2",
+    "pluck-deep": "^3.0.0",
     "qottle": "^1.0.5",
     "write-json-file": "^4.3.0",
     "yargs": "^16.2.0"
